@@ -58,6 +58,8 @@ Tu as maintenant une stack Traefik + deux WordPress opérationnels. L'objectif e
 Il n'y a pas de marche à suivre ici. Explore, teste, casse des choses et répare-les.
 C'est comme ça qu'on apprend Docker.
 
+Pour aller plus loin, on pourrait imaginer l'ajout de middleware sur Traefik (je te laisse découvrir) !
+
 ---
 
 > **Rappel** : en cas de panne, le [guide de debug](../Support.md#7-guide-de-debug) dans `Support.md` suit une logique éprouvée. Commence toujours par `docker compose logs -f` avant de chercher ailleurs.
