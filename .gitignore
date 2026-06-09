@@ -1,0 +1,9 @@
+**/data/
+
+**/wordpress/
+
+**/letsencrypt/acme.json
+**/letsencrypt/
+
+.env
+**/.env
