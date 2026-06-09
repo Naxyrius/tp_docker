@@ -1,121 +1,183 @@
-Ce tp est une version "alpha" visant une première introduction à Docker, traefik et à l'intéraction des conteneurs.
-Toute remarque est bonne à prendre ! 
+# TP Docker — Traefik & WordPress
 
-# TP Introduction à Docker (et docker compose)
+> Introduction pratique à Docker, Docker Compose et au reverse proxy Traefik.
+> L'objectif est de comprendre comment orchestrer plusieurs conteneurs qui communiquent entre eux, avec une terminaison TLS gérée centralement.
 
-## Objectifs : 
-* Installer Docker sur Debian (avec le dépôt officiel)
-* Sécuriser l'accès Docker pour l'utilisateur
-* Orchestrer une stack multi-conteneurs
+En complément le fichier Support.md offre une approche plus didactique ainsi que les composes Traefik et Wordpress "explained" pour expliquer chaques annotations.
 
-## Installation de Docker 
+Différentes approches sont possibles :
 
-### MaJ et installation des depandances
+- Cours.md offre un peu (beaucoup) de lecture avec une petite manipulation de de conteneur
+- Support.md est un parcours semi-guidée pour l'installation de docker 
 
-```
-sudo apt update
-sudo apt install ca-certificates curl gnupg
+---
+
+## Architecture
 
 ```
-
-### Ajout de la clé GPG et du repo docker
-
-```
-sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/debian/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-sudo chmod a+r /etc/apt/keyrings/docker.gpg
-
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \
-  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-```
-
-### Installation du moteur 
-
-```
-sudo apt update
-sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-
+Internet / Navigateur
+        │
+        ▼
+   [ Traefik ]  ← reverse proxy, écoute sur :80 et :443
+        │             lit les labels des conteneurs Docker
+        │             gère les certificats TLS
+        │
+   traefik-net  ← réseau Docker partagé entre les stacks
+        │
+   ┌────┴────┐
+   │         │
+[ WP1 ]   [ WP2 ]   ← conteneurs WordPress (Apache + PHP)
+   │         │
+[ DB1 ]   [ DB2 ]   ← conteneurs MariaDB, isolés sur leurs réseaux internes
 ```
 
-## Ajout du user dans le groupe docker : 
+Chaque stack WordPress tourne de façon **indépendante** dans son propre dossier. Traefik est le seul point d'entrée : il reçoit tout le trafic et le redirige vers le bon WordPress selon le nom de domaine demandé.
+
+---
+
+## Prérequis
+
+- Docker + Docker Compose installés ([guide d'installation](https://docs.docker.com/engine/install/debian/))
+- Votre utilisateur dans le groupe `docker` (`sudo usermod -aG docker $USER`)
+- Le réseau partagé créé **une seule fois** sur l'hôte :
+
+```bash
+docker network create traefik-net
+```
+
+---
+
+## Démarrage rapide
+
+### 1. Traefik
+
+```bash
+cd compose/traefik
+docker compose up -d
+```
+
+Traefik est maintenant actif et surveille les nouveaux conteneurs. Son dashboard est accessible sur [http://localhost:8080](http://localhost:8080).
+
+### 2. WordPress 1
+
+```bash
+cd compose/wordpress1
+docker compose up -d
+```
+
+### 3. WordPress 2
+
+```bash
+cd compose/wordpress2
+docker compose up -d
+```
+
+> Pour accéder aux sites en local, ajoute les entrées suivantes dans ton `/etc/hosts` :
+> ```
+> 127.0.0.1  site1.local
+> 127.0.0.1  site2.local
+> ```
+
+---
+
+## Structure des fichiers
 
 ```
-sudo usermod -aG docker $USER
-newgrp docker
-
+.
+├── compose
+│   ├── traefik
+│   │   └── docker-compose.yml   ← reverse proxy + gestion TLS
+│   ├── wordpress1
+│   │   └── docker-compose.yml   ← stack WP + MariaDB (site1.local)
+│   └── wordpress2
+│       └── docker-compose.yml   ← stack WP + MariaDB (site2.local)
+├── letsencrypt
+│   └── acme.json                ← certificats Let's Encrypt (chmod 600 !)
+└── README.md
 ```
-## Certificat
 
-N'oublie pas de créer le fichier acme.json avec les bons droits (touch acme.json && chmod 600 acme.json) avant de lancer le conteneur.
+---
 
+## Concepts abordés
+
+| Concept | Où le voir dans ce TP |
+|---|---|
+| Image vs conteneur | `image: wordpress:latest` dans les composes |
+| Variables d'environnement | Credentials MariaDB / WordPress |
+| Réseaux Docker | `db1-net` (interne) vs `traefik-net` (partagé) |
+| Volumes | Persistance de la BDD et des fichiers WordPress |
+| Labels | Configuration dynamique de Traefik |
+| Reverse proxy | Traefik route selon le `Host` HTTP |
+| Terminaison TLS | Certificat auto-signé ou Let's Encrypt via Traefik |
+| `depends_on` | Ordre de démarrage WordPress → MariaDB |
+
+---
+
+## TLS — deux modes
+
+### Certificat auto-signé (dev local)
+
+Aucune configuration supplémentaire dans Traefik. Dans le compose WordPress, il suffit d'activer TLS sans préciser de resolver :
+
+```yaml
+- "traefik.http.routers.wp1.tls=true"
 ```
-touch acme.json && chmod 600 acme.json
+
+Le navigateur affichera un avertissement de sécurité, ce qui est normal.
+
+### Let's Encrypt (domaine public)
+
+1. Décommenter les lignes ACME dans `compose/traefik/docker-compose.yml`
+2. Renseigner une adresse email valide
+3. Créer le fichier de stockage des certificats :
+
+```bash
+touch letsencrypt/acme.json && chmod 600 letsencrypt/acme.json
 ```
 
+4. Dans le compose WordPress, s'assurer que le label pointe vers le bon resolver :
 
-# Cheat Sheet 
-
-Lancer un conteneur depuis un compose :
-
+```yaml
+- "traefik.http.routers.wp1.tls.certresolver=myresolver"
 ```
+
+> Let's Encrypt applique un quota de **5 certificats par domaine par semaine**. En cas de tests répétés, utilise l'environnement de staging ACME pour éviter de le dépasser.
+
+---
+
+## Commandes utiles
+
+```bash
+# Démarrer une stack
 docker compose up -d
 
-```
-
-Tout stopper  :
-
-```
+# Arrêter une stack (les volumes sont conservés)
 docker compose down
 
-```
+# Arrêter ET supprimer les volumes (reset complet)
+docker compose down -v
 
-Afficher les conteneurs : 
-
-```
+# Voir les conteneurs actifs
 docker ps
-```
 
-
-Afficher les logs :
-
-```
+# Suivre les logs en temps réel
 docker compose logs -f
 
+# Entrer dans un conteneur
+docker exec -it <nom_du_conteneur> bash
+
+# Lister les réseaux Docker
+docker network ls
+
+# Inspecter un conteneur
+docker inspect <nom_du_conteneur>
 ```
 
-Rentrer dans le conteneur : 
+---
 
-```
-docker exec -it 
-```
+## Ressources
 
-# Via Docker Compose 
-
-Adapte les noms et monte la stack Traefik / Wordpress
-/!\ Modifie les mdp :D
-
-Ajoute un nouveau containeurs du service de ton choix et adapte son docker compose
-
-Modifie une page d'un wordpress, puis fait un down/up.
-
--> Tu dois avoir perdu des petits, on ajoute donc un volume pour la persistance des données
-
-
-
-# Certificat
-En fonction de l'environnement, ajoute un certificat let's encrypt au niveau de Traefik pour gérer la terminaison TLS
-
-Pour du certificat auto-signé par traefik on ajoute ça au compose de traefik
-
-```
-labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.wp1.rule=Host(`site1.local`)"
-      - "traefik.http.routers.wp1.entrypoints=websecure"
-      # On dit à Traefik de générer un certificat local d'office, sans resolver :
-      - "traefik.http.routers.wp1.tls=true"
-
-``` 
+- [Documentation Docker](https://docs.docker.com/)
+- [Documentation Traefik v2](https://doc.traefik.io/traefik/)
+- [Docker Hub — WordPress](https://hub.docker.com/_/wordpress)
+- [Docker Hub — MariaDB](https://hub.docker.com/_/mariadb)

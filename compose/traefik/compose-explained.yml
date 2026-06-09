@@ -1,0 +1,73 @@
+services:
+  traefik:
+    # Image officielle Traefik. On fixe une version précise (v2.11) plutôt que
+    # "latest" pour éviter les mauvaises surprises lors d'une mise à jour majeure.
+    image: traefik:v2.11
+
+    command:
+      # Active le dashboard Traefik sur le port 8080, sans authentification.
+      # Pratique en dev pour visualiser les routes et services détectés,
+      # mais à désactiver ou protéger en production !
+      - "--api.insecure=true"
+
+      # Indique à Traefik d'utiliser Docker comme source de configuration.
+      # Il va surveiller le socket Docker et détecter automatiquement
+      # les conteneurs qui ont des labels Traefik.
+      - "--providers.docker=true"
+
+      # Déclare un point d'entrée nommé "web" qui écoute sur le port 80 (HTTP).
+      # Ce nom "web" sera référencé dans les labels des autres conteneurs
+      # pour leur indiquer par quel entrypoint ils sont accessibles.
+      - "--entrypoints.web.address=:80"
+
+      # ---- À DÉCOMMENTER POUR LE HTTPS / LET'S ENCRYPT ----
+
+      # Déclare un second point d'entrée "websecure" sur le port 443 (HTTPS).
+      # - "--entrypoints.websecure.address=:443"
+
+      # Active le challenge TLS-ALPN-01 pour valider le domaine auprès de Let's Encrypt.
+      # Traefik répond directement sur le port 443 pour prouver qu'il contrôle le domaine.
+      # - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+
+      # Adresse email transmise à Let's Encrypt pour les notifications (expiration, etc.).
+      # - "--certificatesresolvers.myresolver.acme.email=ton-email@exemple.com"
+
+      # Fichier où Traefik stocke les certificats obtenus.
+      # Doit être monté via un volume et avoir les permissions 600 (voir plus bas).
+      # - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+
+      # ----------------------------------------------------
+
+    ports:
+      # Expose le port 80 de l'hôte vers le port 80 du conteneur (HTTP).
+      - "80:80"
+      # Expose le port 443 même si HTTPS n'est pas encore activé :
+      # ça évite d'avoir à recréer le conteneur quand on basculera en HTTPS.
+      - "443:443"
+
+    volumes:
+      # Monte le socket Docker en lecture dans le conteneur.
+      # C'est ce qui permet à Traefik de "voir" les autres conteneurs
+      # et de lire leurs labels pour construire sa configuration dynamiquement.
+      #  Donne à Traefik un accès privilégié au daemon Docker :
+      #    à ne pas exposer sur Internet sans précautions supplémentaires.
+      - /var/run/docker.sock:/var/run/docker.sock
+
+      # Monte un dossier local pour persister le fichier acme.json.
+      # Sans ce volume, les certificats seraient perdus à chaque redémarrage
+      # et Traefik redemanderait des certificats (quota Let's Encrypt limité !).
+      # Pense à créer le fichier au préalable : touch letsencrypt/acme.json && chmod 600 letsencrypt/acme.json
+      - ./letsencrypt:/letsencrypt
+
+    networks:
+      # Traefik doit être sur le même réseau que les conteneurs qu'il doit router.
+      # On utilise un réseau externe (créé manuellement) pour le partager
+      # entre plusieurs stacks Docker Compose indépendantes.
+      - traefik-net
+
+networks:
+  traefik-net:
+    # "external: true" signifie que ce réseau n'est PAS créé par ce compose,
+    # il doit déjà exister sur l'hôte. Pour le créer :
+    #   docker network create traefik-net
+    external: true

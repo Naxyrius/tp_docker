@@ -1,0 +1,91 @@
+services:
+  db:
+    # Image MariaDB (fork communautaire de MySQL, très utilisé avec WordPress).
+    # On fixe la version 10.11 (LTS) plutôt que "latest" pour la stabilité.
+    image: mariadb:10.11
+
+    environment:
+      # Nom de la base de données créée automatiquement au premier démarrage.
+      MYSQL_DATABASE: wp1
+
+      # Utilisateur applicatif dédié à WordPress.
+      # Bonne pratique : on ne donne pas à WordPress les droits root sur la BDD.
+      MYSQL_USER: wpuser1
+      MYSQL_PASSWORD: password1         # À changer !
+
+      # Mot de passe du compte root MariaDB (accès total).
+      # Utilisé uniquement pour l'administration, pas par WordPress.
+      MYSQL_ROOT_PASSWORD: rootpassword1 # À changer !
+
+    networks:
+      # La BDD est isolée sur un réseau interne dédié à cette stack.
+      # Elle n'est PAS connectée à traefik-net : elle n'a pas besoin
+      # d'être accessible depuis l'extérieur, seulement par WordPress.
+      - db1-net
+
+  wordpress:
+    # Image officielle WordPress avec Apache intégré.
+    # "latest" est acceptable ici pour toujours avoir la dernière version,
+    # mais en prod on préférera fixer une version pour maîtriser les mises à jour.
+    image: wordpress:latest
+
+    # WordPress a besoin que MariaDB soit prêt avant de démarrer.
+    # Sans ça, WordPress peut tenter de se connecter avant que la BDD soit initialisée.
+    depends_on:
+      - db
+
+    environment:
+      # Adresse de la base de données. On utilise le nom du service ("db")
+      # comme hostname : Docker Compose crée automatiquement une entrée DNS
+      # sur le réseau partagé, ce qui permet aux conteneurs de se parler par nom.
+      WORDPRESS_DB_HOST: db:3306
+
+      # Ces valeurs doivent correspondre exactement à celles définies dans le service db.
+      WORDPRESS_DB_USER: wpuser1
+      WORDPRESS_DB_PASSWORD: password1  #  À changer !
+      WORDPRESS_DB_NAME: wp1
+
+    labels:
+      # Active la gestion de ce conteneur par Traefik.
+      # Sans ce label, Traefik ignore complètement le conteneur.
+      - "traefik.enable=true"
+
+      # Règle de routage : Traefik envoie vers ce conteneur toutes les requêtes
+      # dont le header Host correspond à "site1.local".
+      # Pour du Let's Encrypt, ce domaine doit être un vrai FQDN public.
+      - "traefik.http.routers.wp1.rule=Host(`site1.local`)"
+
+      # Ce routeur utilise l'entrypoint "websecure" (port 443, défini dans Traefik).
+      # Pour du HTTP simple, on mettrait "web" à la place.
+      - "traefik.http.routers.wp1.entrypoints=websecure"
+
+      # Indique à Traefik quel resolver ACME utiliser pour obtenir le certificat.
+      # "myresolver" doit correspondre au nom déclaré dans la config Traefik
+      # (--certificatesresolvers.myresolver.acme.*).
+      # Pour un certificat auto-signé local, remplacer par : "traefik.http.routers.wp1.tls=true"
+      - "traefik.http.routers.wp1.tls.certresolver=myresolver"
+
+      # Précise sur quel port interne tourne l'application dans le conteneur.
+      # WordPress/Apache écoute sur le port 80 à l'intérieur du conteneur.
+      # Traefik a besoin de cette info pour savoir où forwarder le trafic,
+      # surtout quand le conteneur expose plusieurs ports.
+      - "traefik.http.services.wp1.loadbalancer.server.port=80"
+
+    networks:
+      # Connecté au réseau interne pour parler à la BDD...
+      - db1-net
+      # ...ET au réseau Traefik pour recevoir le trafic HTTP/HTTPS de l'extérieur.
+      # C'est le seul conteneur de la stack qui a besoin des deux réseaux.
+      - traefik-net
+
+networks:
+  # Réseau interne isolé pour la communication WordPress <-> MariaDB.
+  # Créé automatiquement par Compose (pas "external"), donc propre à cette stack.
+  # MariaDB n'est ainsi jamais exposée directement à Traefik ou à l'extérieur.
+  db1-net:
+
+  traefik-net:
+    # Réseau partagé avec la stack Traefik, créé manuellement au préalable.
+    # Toutes les stacks qui veulent être routées par Traefik doivent le rejoindre.
+    # Rappel : docker network create traefik-net
+    external: true
