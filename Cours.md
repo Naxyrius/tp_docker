@@ -228,6 +228,17 @@ docker network create traefik-net
 ```
 À ne faire qu'**une seule fois** sur l'hôte.
 
+### 404 page not found
+
+Lors des test en cours de build, si l'on souhaite vérifier le site avant d'avoir implémenté le TLS, il est nécéssaire de déclarer des labels pour le http (80)
+
+```
+      - "traefik.enable=true"
+      - "traefik.http.routers.wp1.rule=Host(`site1.local`)"
+      - "traefik.http.routers.wp1.entrypoints=web"
+      - "traefik.http.services.wp1.loadbalancer.server.port=80"
+```
+
 ---
 
 ### Les mots de passe MariaDB ne correspondent pas
