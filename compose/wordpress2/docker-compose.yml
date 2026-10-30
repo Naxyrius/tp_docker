@@ -1,0 +1,32 @@
+services:
+  db:
+    image: mariadb:10.11
+    environment:
+      MYSQL_DATABASE: wp2
+      MYSQL_USER: wpuser2
+      MYSQL_PASSWORD: password2
+      MYSQL_ROOT_PASSWORD: rootpassword2
+    networks:
+      - db2-net
+
+  wordpress:
+    image: wordpress:latest
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_USER: wpuser2
+      WORDPRESS_DB_PASSWORD: password2
+      WORDPRESS_DB_NAME: wp2
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.wp2.rule=Host(`site2.local`)"
+      - "traefik.http.routers.wp2.entrypoints=websecure"
+      - "traefik.http.routers.wp2.tls.certresolver=myresolver"
+      - "traefik.http.services.wp2.loadbalancer.server.port=80"
+    networks:
+      - db2-net
+      - traefik-net
+
+networks:
+  db2-net:
+  traefik-net:
+    external: true

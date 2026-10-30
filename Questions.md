@@ -3,15 +3,15 @@
 
 Q. Pourquoi utiliser des networks différents pour les db
 
-Q. Quelle est la force et le principal intéret de Traefik en comparaison avec Nginx
+Q. Quelle est la force et le principal intéret de Traefik en comparaison avec Nginx ?
 
-Q. Monte un ou deux wordpress, modifie l'un d'entre eux, puis stop el et relance le, qu'observe-t-on ?
+Q. Monte un ou deux wordpress, modifie l'un d'entre eux, puis stop le et relance le, qu'observe-t-on ?
 
-Q. Pour palier à ce souci ajoute des volumes aux Wordpress (et Maria)
+ Pour palier à ce souci ajoute des volumes aux Wordpress (et Maria)
 
 Q. Qu'est-ce qu'un wildcard quand on parle de certificats TLS ? (ici on en utilisera pas)
 
-Q. Ajoute une redirection HTTP ver HTTPS
+ Ajoute une redirection HTTP ver HTTPS
 
 ```
 - "--entrypoints.web.http.redirections.entryPoint.to=websecure"

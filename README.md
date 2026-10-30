@@ -7,7 +7,7 @@ En complément le fichier Support.md offre une approche plus didactique ainsi qu
 
 Différentes approches sont possibles :
 
-- Cours.md offre un peu (beaucoup) de lecture avec une petite manipulation de de conteneur
+- Cours.md offre un peu (beaucoup) de lecture avec une petite manipulation de conteneur
 - Support.md est un parcours semi-guidée pour l'installation de docker 
 
 /!\ Dans le cas d'un lab, il est évidement possible d'adapter les fqdn et d'utiliser un vrai domaine (ce qui simplifiera largement la partie sur les certificats)
